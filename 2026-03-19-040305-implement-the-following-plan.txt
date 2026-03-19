@@ -1,0 +1,1535 @@
+ ▐▛███▜▌   Claude Code v2.1.79
+▝▜█████▛▘  Sonnet 4.6 · API Usage Billing
+  ▘▘ ▝▝    ~\Desktop\prj\se\pj\soft-engg-project-jan-2026
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ Deliverable Detail Page & Data Functions                                     │
+│                                                                              │
+│ Context                                                                      │
+│                                                                              │
+│ The deliverable list in the project detail page currently only shows         │
+│ approved deliverables in a summary table. There's no way to view full        │
+│ version history, create new deliverables, or upload new versions. This plan  │
+│ adds:                                                                        │
+│ 1. Two new data functions for creating deliverables and uploading versions   │
+│ 2. A new deliverable detail page with version history                        │
+│ 3. A "New Deliverable" button on the project detail page                     │
+│ 4. An "Upload New Version" button on the detail page                         │
+│                                                                              │
+│ Files to Modify                                                              │
+│                                                                              │
+│ ┌─────────────────────────────────────────────────────┬───────────────────┐  │
+│ │                        File                         │      Action       │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │                                                     │ Add               │  │
+│ │ frontend/data/deliverables.ts                       │ addDeliverable()  │  │
+│ │                                                     │ and addDeliverabl │  │
+│ │                                                     │ eVersion()        │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │ frontend/app/(app)/projects/[id]/deliverables/[deli │ New file — detail │  │
+│ │ verableId]/page.tsx                                 │  page             │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │ frontend/app/(app)/projects/[id]/deliverables/new/p │ New file — create │  │
+│ │ age.tsx                                             │  form page        │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │ frontend/components/projects/deliverable-detail-pag │ New file — detail │  │
+│ │ e.tsx                                               │  page component   │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │ frontend/components/projects/deliverable-new-form.t │ New file — create │  │
+│ │ sx                                                  │  form component   │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │                                                     │ Add "New          │  │
+│ │ frontend/app/(app)/projects/[id]/page.tsx           │ Deliverable"      │  │
+│ │                                                     │ button in         │  │
+│ │                                                     │ deliverables tab  │  │
+│ ├─────────────────────────────────────────────────────┼───────────────────┤  │
+│ │                                                     │ Add links to      │  │
+│ │ frontend/components/projects/deliverable-list.tsx   │ detail page from  │  │
+│ │                                                     │ each row          │  │
+│ └─────────────────────────────────────────────────────┴───────────────────┘  │
+│                                                                              │
+│ Implementation                                                               │
+│                                                                              │
+│ 1. Add data functions to frontend/data/deliverables.ts                       │
+│                                                                              │
+│ addDeliverable(data) — at end of file, following addTask pattern:            │
+│ export function addDeliverable(data: {                                       │
+│   projectId: string;                                                         │
+│   milestoneId: string;                                                       │
+│   taskId: string;                                                            │
+│   title: string;                                                             │
+│   description: string;                                                       │
+│   assignedTo: string;                                                        │
+│ }): Deliverable                                                              │
+│ - Generates id: \dlv_${Date.now()}``                                         │
+│ - Sets status: "in_progress", currentVersion: "1.0"                          │
+│ - Creates initial DeliverableVersion with version "1.0", note "Initial       │
+│ submission", uploadedBy from assignee                                        │
+│ - Pushes to deliverables array and returns it                                │
+│                                                                              │
+│ addDeliverableVersion(id, data):                                             │
+│ export function addDeliverableVersion(                                       │
+│   id: string,                                                                │
+│   data: { note: string; fileUrl: string; uploadedBy: string }                │
+│ ): Deliverable | undefined                                                   │
+│ - Finds deliverable by id                                                    │
+│ - Auto-increments currentVersion (e.g. "1.0" → "2.0", "2.0" → "3.0") by      │
+│ parsing float + 1                                                            │
+│ - Pushes new DeliverableVersion with uploadedAt: new Date().toISOString()    │
+│ - Updates currentVersion and returns deliverable                             │
+│                                                                              │
+│ 2. Create                                                                    │
+│ frontend/app/(app)/projects/[id]/deliverables/[deliverableId]/page.tsx       │
+│                                                                              │
+│ Route component following the brief detail page pattern                      │
+│ (brief/[briefId]/page.tsx):                                                  │
+│ "use client";                                                                │
+│ import { DeliverableDetailPage } from                                        │
+│ "@/components/projects/deliverable-detail-page";                             │
+│ export default function DeliverableDetailPageRoute() {                       │
+│   return <DeliverableDetailPage />;                                          │
+│ }                                                                            │
+│                                                                              │
+│ 3. Create frontend/components/projects/deliverable-detail-page.tsx           │
+│                                                                              │
+│ Main component following BriefVersionPage pattern:                           │
+│ - Uses useParams() to get id (project) and deliverableId                     │
+│ - Uses useAuth() for auth guard                                              │
+│ - Fetches deliverable via getDeliverableById(deliverableId)                  │
+│ - Fetches project via getProjectById(id) for breadcrumb                      │
+│                                                                              │
+│ Layout:                                                                      │
+│ 1. Back link → project detail page                                           │
+│ 2. Header: title, status badge (using deliverableStatusColors), current      │
+│ version badge                                                                │
+│ 3. Metadata row: assignee, milestone, task (as links)                        │
+│ 4. Version history list (newest first) — each entry shows:                   │
+│   - Version number badge (highlighted if current)                            │
+│   - Upload date, uploader name                                               │
+│   - Note text                                                                │
+│   - File link (download)                                                     │
+│   - "Current" badge on the active version                                    │
+│ 5. "Upload New Version" button — shows an inline form with note + fileUrl    │
+│ fields, calls addDeliverableVersion()                                        │
+│ 6. Approval info if approved (approvedBy, approvedAt)                        │
+│                                                                              │
+│ 4. Update project detail page frontend/app/(app)/projects/[id]/page.tsx      │
+│                                                                              │
+│ - Show ALL deliverables (not just approved) in the deliverables tab — remove │
+│  the .filter((d) => d.status === "approved")                                 │
+│ - Add "New Deliverable" button in the deliverables tab section, linking to a │
+│  form (inline dialog or separate page)                                       │
+│ - Pass all deliverables (not just approved) to DeliverableList               │
+│                                                                              │
+│ For the "New Deliverable" form: Create a separate page at                    │
+│ frontend/app/(app)/projects/[id]/deliverables/new/page.tsx with a form       │
+│ component, consistent with how tasks/milestones/budgets work in the          │
+│ codebase.                                                                    │
+│                                                                              │
+│ Form fields: title, description, milestone (dropdown from project            │
+│ milestones), task (dropdown from project tasks), assignee (dropdown from     │
+│ project team). The "New Deliverable" button on the project detail page links │
+│  to this route.                                                              │
+│                                                                              │
+│ 5. Update frontend/components/projects/deliverable-list.tsx                  │
+│                                                                              │
+│ - Make each row clickable / link to the deliverable detail page at           │
+│ /projects/{projectId}/deliverables/{deliverableId}                           │
+│ - Add a projectId prop or use the deliverable's own projectId                │
+│                                                                              │
+│ Verification                                                                 │
+│                                                                              │
+│ 1. Navigate to a project detail page → Deliverables tab should now show all  │
+│ deliverables (not just approved)                                             │
+│ 2. Click "New Deliverable" → form appears → fill in fields → submit → new    │
+│ deliverable appears in list                                                  │
+│ 3. Click a deliverable row → navigates to detail page                        │
+│ 4. Detail page shows title, description, status, assignee, milestone/task    │
+│ links, and full version history                                              │
+│ 5. Click "Upload New Version" → form appears → enter note and file URL →     │
+│ submit → new version appears in list, current version updates                │
+│ 6. Back link returns to project detail page                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+● Explore(Find brief detail page pattern)
+  ⎿  Done (0 tool uses · 0 tokens · 1s)
+  (ctrl+o to expand)
+
+● Let me find the brief detail page pattern files directly.
+
+  Searched for 3 patterns, read 1 file (ctrl+o to expand)
+
+● Now let me check the addTask pattern and milestones data for the form.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● I have a good understanding of the codebase. Let me implement all the changes.
+
+✻ Sautéed for 1m 15s
+
+❯ yes impliment                                                                 
+
+● Starting implementation now.
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 50 lines
+      254  export function getDeliverableById(id: string): Deliverable | 
+           undefined {
+      255    return deliverables.find((d) => d.id === id);
+      256  }
+      257 +                                                              
+      258 +export function addDeliverable(data: {                        
+      259 +  projectId: string;                                          
+      260 +  milestoneId: string;                                        
+      261 +  taskId: string;                                             
+      262 +  title: string;                                              
+      263 +  description: string;                                        
+      264 +  assignedTo: string;                                         
+      265 +}): Deliverable {                                             
+      266 +  const deliverable: Deliverable = {                          
+      267 +    id: `dlv_${Date.now()}`,                                  
+      268 +    projectId: data.projectId,                                
+      269 +    milestoneId: data.milestoneId,                            
+      270 +    taskId: data.taskId,                                      
+      271 +    title: data.title,                                        
+      272 +    description: data.description,                            
+      273 +    assignedTo: data.assignedTo,                              
+      274 +    status: "in_progress",                                    
+      275 +    currentVersion: "1.0",                                    
+      276 +    versions: [                                               
+      277 +      {                                                       
+      278 +        version: "1.0",                                       
+      279 +        uploadedBy: data.assignedTo,                          
+      280 +        uploadedAt: new Date().toISOString(),                 
+      281 +        note: "Initial submission",                           
+      282 +        fileUrl: "",                                          
+      283 +      },                                                      
+      284 +    ],                                                        
+      285 +  };                                                          
+      286 +  deliverables.push(deliverable);                             
+      287 +  return deliverable;                                         
+      288 +}                                                             
+      289 +                                                              
+      290 +export function addDeliverableVersion(                        
+      291 +  id: string,                                                 
+      292 +  data: { note: string; fileUrl: string; uploadedBy: string } 
+      293 +): Deliverable | undefined {                                  
+      294 +  const deliverable = deliverables.find((d) => d.id === id);  
+      295 +  if (!deliverable) return undefined;                         
+      296 +  const nextVersion = (Math.floor(parseFloat(deliverable.curre
+          +ntVersion)) + 1).toString() + ".0";                           
+      297 +  deliverable.versions.push({                                 
+      298 +    version: nextVersion,                                     
+      299 +    uploadedBy: data.uploadedBy,                              
+      300 +    uploadedAt: new Date().toISOString(),                     
+      301 +    note: data.note,                                          
+      302 +    fileUrl: data.fileUrl,                                    
+      303 +  });                                                         
+      304 +  deliverable.currentVersion = nextVersion;                   
+      305 +  return deliverable;                                         
+      306 +}                                                             
+
+● Now creating the deliverable detail page component and route.
+
+● Write(frontend\app\(app)\projects\[id]\deliverables\[deliverableId]\page.tsx)
+  ⎿  Wrote 7 lines to
+     frontend\app\(app)\projects\[id]\deliverables\[deliverableId]\page.tsx
+      1 "use client";
+      2 
+      3 import { DeliverableDetailPage } from "@/components/projects/deli
+        verable-detail-page";
+      4 
+      5 export default function DeliverableDetailPageRoute() {
+      6   return <DeliverableDetailPage />;
+      7 }
+
+● Now creating the new deliverable form page and component.
+
+● Write(frontend\app\(app)\projects\[id]\deliverables\new\page.tsx)
+  ⎿  Wrote 7 lines to
+     frontend\app\(app)\projects\[id]\deliverables\new\page.tsx
+      1 "use client";
+      2 
+      3 import { DeliverableNewForm } from "@/components/projects/deliver
+        able-new-form";
+      4 
+      5 export default function NewDeliverablePageRoute() {
+      6   return <DeliverableNewForm />;
+      7 }
+
+● Let me fix the assignee dropdown to show user names properly.
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 1 line
+       8  import { getMilestonesByProject } from "@/data/milestones";
+       9  import { getTasksByProject } from "@/data/tasks";
+      10  import { addDeliverable } from "@/data/deliverables";
+      11 +import { getUserById } from "@/data/users";                    
+      12  import { Button } from "@/components/ui/button";
+      13  import { Input } from "@/components/ui/input";
+      14  import { Textarea } from "@/components/ui/textarea";
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 2 lines, removed 4 lines
+      177                  </SelectTrigger>
+      178                  <SelectContent>
+      179                    {project.teamMemberIds.map((memberId) => {
+      180 -                    const member = project.teamMemberIds.find(
+      181 -                      (id) => id === memberId                 
+      182 -                    );                                        
+      180 +                    const member = getUserById(memberId);     
+      181                      return (
+      182                        <SelectItem key={memberId} value={member
+           Id}>
+      185 -                        {memberId}                            
+      183 +                        {member?.name ?? memberId}            
+      184                        </SelectItem>
+      185                      );
+      186                    })}
+
+● Now updating the project detail page and deliverable list.
+
+● Update(frontend\app\(app)\projects\[id]\page.tsx)
+  ⎿  Added 1 line, removed 3 lines
+      130    const budgets = getBudgetsByProject(project.id);
+      131    const expenseItems = getExpensesByProject(project.id);
+      132    const activity = getActivityByProject(project.id);
+      133 -  const deliverableItems = getDeliverablesByProject(project.id
+          -).filter(                                                     
+      134 -    (d) => d.status === "approved"                            
+      135 -  );                                                          
+      133 +  const deliverableItems = getDeliverablesByProject(project.id
+          +);                                                            
+      134    const brief = getBriefByProject(project.id);
+      135    const teamCapacity = getTeamCapacity(project.id);
+      136  
+
+● Update(frontend\app\(app)\projects\[id]\page.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      535  
+      536          {/* Deliverables Tab */}
+      537          <TabsContent value="deliverables" className="space-y-4
+           ">
+      538 -          <DeliverableList deliverables={deliverableItems} /> 
+      538 +          <DeliverableList                                    
+      539 +            deliverables={deliverableItems}                   
+      540 +            projectId={project.id}                            
+      541 +            action={                                          
+      542 +              <Button asChild size="sm">                      
+      543 +                <Link href={`/projects/${project.id}/deliverab
+          +les/new`}>                                                    
+      544 +                  New Deliverable                             
+      545 +                </Link>                                       
+      546 +              </Button>                                       
+      547 +            }                                                 
+      548 +          />                                                  
+      549          </TabsContent>
+      550  
+      551          {/* People Tab */}
+
+● Now updating the deliverable list component to link rows to detail page and
+  accept the new props.
+
+● Update(frontend\components\projects\deliverable-list.tsx)
+  ⎿  Added 2 lines
+       3  import { getUserById } from "@/data/users";
+       4  import type { Deliverable } from "@/data/deliverables";
+       5  import { Badge } from "@/components/ui/badge";
+       6 +import { Button } from "@/components/ui/button";               
+       7  import {
+       8    Download,
+       9    User,
+      10    Calendar,
+      11    CheckCircle2,
+      12  } from "lucide-react";
+      13 +import Link from "next/link";                                  
+      14  
+      15  function formatDateTime(dateStr: string) {
+      16    return new Date(dateStr).toLocaleDateString("en-IN", {
+
+● Update(frontend\components\projects\deliverable-list.tsx)
+  ⎿  Added 16 lines, removed 3 lines
+      24  
+      25  export function DeliverableList({
+      26    deliverables,
+      27 +  projectId,                                                   
+      28 +  action,                                                      
+      29  }: {
+      30    deliverables: Deliverable[];
+      31 +  projectId: string;                                           
+      32 +  action?: React.ReactNode;                                    
+      33  }) {
+      34    if (deliverables.length === 0) {
+      35      return (
+      32 -      <p className="py-6 text-center text-sm text-muted-foregro
+         -und">                                                          
+      33 -        No approved deliverables for this project yet.         
+      34 -      </p>                                                     
+      36 +      <div className="flex flex-col items-center gap-3 py-6">  
+      37 +        <p className="text-sm text-muted-foreground">          
+      38 +          No deliverables for this project yet.                
+      39 +        </p>                                                   
+      40 +        {action}                                               
+      41 +      </div>                                                   
+      42      );
+      43    }
+      44  
+      45    return (
+      46      <div className="flex flex-col gap-3">
+      47 +      <div className="flex items-center justify-between">      
+      48 +        <span className="text-sm text-muted-foreground">       
+      49 +          {deliverables.length} deliverable{deliverables.length
+         + !== 1 && "s"}                                                 
+      50 +        </span>                                                
+      51 +        {action}                                               
+      52 +      </div>                                                   
+      53        {/* Table */}
+      54        <div className="rounded-lg border">
+      55          {/* Column Headers */}
+
+● Update(frontend\components\projects\deliverable-list.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      75              const ext = currentVer?.fileUrl.split(".").pop()?.t
+          oUpperCase() ?? "FILE";
+      76  
+      77              return (
+      78 -              <div                                             
+      78 +              <Link                                            
+      79                  key={dlv.id}
+      80 +                href={`/projects/${projectId}/deliverables/${dl
+         +v.id}`}                                                        
+      81                  className="grid grid-cols-12 items-center gap-4
+           px-4 py-3 transition-colors hover:bg-muted/40"
+      82                >
+      83                  {/* Title + description */}
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(frontend\components\projects\deliverable-list.tsx)
+  ⎿  Added 1 line, removed 1 line
+      140                      </a>
+      141                    )}
+      142                  </div>
+      143 -              </div>                                          
+      143 +              </Link>                                         
+      144              );
+      145            })}
+      146          </div>
+
+● Let me verify the build compiles correctly.
+
+● Bash(npx next build 2>&1 | tail -40)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ and the deliverable would be linked to a task at the end , so we need to make 
+ sure of that aswell                                                            
+
+● Let me check the current form and task data to ensure proper task linking.
+
+  Read 1 file (ctrl+o to expand)
+
+● Good point. I'll improve the form so that:
+  1. When a milestone is selected, the task dropdown filters to only that
+  milestone's tasks
+  2. When a task is selected, the milestone auto-populates
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 1 line, removed 1 line
+       6  import { useAuth } from "@/lib/auth";
+       7  import { getProjectById } from "@/data/projects";
+       8  import { getMilestonesByProject } from "@/data/milestones";
+       9 -import { getTasksByProject } from "@/data/tasks";              
+       9 +import { getTasksByProject, getTaskById } from "@/data/tasks"; 
+      10  import { addDeliverable } from "@/data/deliverables";
+      11  import { getUserById } from "@/data/users";
+      12  import { Button } from "@/components/ui/button";
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 4 lines, removed 1 line
+      47    const projectId = params.id as string;
+      48    const project = getProjectById(projectId);
+      49    const milestones = getMilestonesByProject(projectId);
+      50 -  const tasks = getTasksByProject(projectId);                  
+      50 +  const allTasks = getTasksByProject(projectId);               
+      51 +  const tasks = milestoneId                                    
+      52 +    ? allTasks.filter((t) => t.milestoneId === milestoneId)    
+      53 +    : allTasks;                                                
+      54  
+      55    useEffect(() => {
+      56      if (project) {
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      142  
+      143              <div>
+      144                <label className="text-sm font-medium">Milestone
+           </label>
+      145 -              <Select value={milestoneId} onValueChange={setMi
+          -lestoneId}>                                                   
+      145 +              <Select                                         
+      146 +                value={milestoneId}                           
+      147 +                onValueChange={(val) => {                     
+      148 +                  setMilestoneId(val);                        
+      149 +                  // Clear task if it doesn't belong to the se
+          +lected milestone                                              
+      150 +                  const selectedTask = getTaskById(taskId);   
+      151 +                  if (selectedTask && selectedTask.milestoneId
+          + !== val) {                                                   
+      152 +                    setTaskId("");                            
+      153 +                  }                                           
+      154 +                }}                                            
+      155 +              >                                               
+      156                  <SelectTrigger className="mt-1">
+      157                    <SelectValue placeholder="Select milestone" 
+           />
+      158                  </SelectTrigger>
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      168  
+      169              <div>
+      170                <label className="text-sm font-medium">Task</lab
+           el>
+      171 -              <Select value={taskId} onValueChange={setTaskId}
+          ->                                                             
+      171 +              <Select                                         
+      172 +                value={taskId}                                
+      173 +                onValueChange={(val) => {                     
+      174 +                  setTaskId(val);                             
+      175 +                  // Auto-populate milestone from selected tas
+          +k                                                             
+      176 +                  const selectedTask = getTaskById(val);      
+      177 +                  if (selectedTask) {                         
+      178 +                    setMilestoneId(selectedTask.milestoneId); 
+      179 +                  }                                           
+      180 +                }}                                            
+      181 +              >                                               
+      182                  <SelectTrigger className="mt-1">
+      183                    <SelectValue placeholder="Select task" />
+      184                  </SelectTrigger>
+
+● Let me verify the form looks correct.
+
+  Read 1 file (ctrl+o to expand)
+
+● The form now properly links deliverables to tasks:
+  - Selecting a milestone filters the task dropdown to only that milestone's
+  tasks
+  - Selecting a task auto-populates the milestone field
+  - Milestone changes clear the task if it doesn't match
+
+  Let me verify the build compiles.
+
+● Bash(npx next build 2>&1 | tail -50)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ no but as tasks are part of milestones and milestones are a part of proejct , 
+ can we do like select the task and others are propograted and also let the     
+person who is assigned to the task them only upload for that task               
+
+● Got it. Two changes:
+  1. Task-first selection — select a task, then milestone auto-propagates
+  2. Assignee locked to task assignee — only the person assigned to the task can
+   upload
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 2 lines, removed 3 lines
+      48    const project = getProjectById(projectId);
+      49    const milestones = getMilestonesByProject(projectId);
+      50    const allTasks = getTasksByProject(projectId);
+      51 -  const tasks = milestoneId                                    
+      52 -    ? allTasks.filter((t) => t.milestoneId === milestoneId)    
+      53 -    : allTasks;                                                
+      51 +  const selectedTask = taskId ? getTaskById(taskId) : undefined
+         +;                                                              
+      52 +  const assignedTo = selectedTask?.assignedTo ?? "";           
+      53  
+      54    useEffect(() => {
+      55      if (project) {
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Removed 1 line
+      36    const [description, setDescription] = useState("");
+      37    const [milestoneId, setMilestoneId] = useState("");
+      38    const [taskId, setTaskId] = useState("");
+      39 -  const [assignedTo, setAssignedTo] = useState("");            
+      39  
+      40    useEffect(() => {
+      41      if (!isLoading && !user) {
+
+● Now reorder the form so task comes first, milestone auto-populates, and
+  assignee is shown read-only.
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Error editing file
+
+● Update(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 36 lines, removed 51 lines
+      139              </div>
+      140  
+      141              <div>
+      142 -              <label className="text-sm font-medium">Milestone
+          -</label>                                                      
+      143 -              <Select                                         
+      144 -                value={milestoneId}                           
+      145 -                onValueChange={(val) => {                     
+      146 -                  setMilestoneId(val);                        
+      147 -                  // Clear task if it doesn't belong to the se
+          -lected milestone                                              
+      148 -                  const selectedTask = getTaskById(taskId);   
+      149 -                  if (selectedTask && selectedTask.milestoneId
+          - !== val) {                                                   
+      150 -                    setTaskId("");                            
+      151 -                  }                                           
+      152 -                }}                                            
+      153 -              >                                               
+      154 -                <SelectTrigger className="mt-1">              
+      155 -                  <SelectValue placeholder="Select milestone" 
+          -/>                                                            
+      156 -                </SelectTrigger>                              
+      157 -                <SelectContent>                               
+      158 -                  {milestones.map((m) => (                    
+      159 -                    <SelectItem key={m.id} value={m.id}>      
+      160 -                      {m.title}                               
+      161 -                    </SelectItem>                             
+      162 -                  ))}                                         
+      163 -                </SelectContent>                              
+      164 -              </Select>                                       
+      165 -            </div>                                            
+      166 -                                                              
+      167 -            <div>                                             
+      142                <label className="text-sm font-medium">Task</lab
+           el>
+      143                <Select
+      144                  value={taskId}
+      145                  onValueChange={(val) => {
+      146                    setTaskId(val);
+      173 -                  // Auto-populate milestone from selected tas
+          -k                                                             
+      174 -                  const selectedTask = getTaskById(val);      
+      175 -                  if (selectedTask) {                         
+      176 -                    setMilestoneId(selectedTask.milestoneId); 
+      147 +                  const task = getTaskById(val);              
+      148 +                  if (task) {                                 
+      149 +                    setMilestoneId(task.milestoneId);         
+      150                    }
+      151                  }}
+      152                >
+      153                  <SelectTrigger className="mt-1">
+      181 -                  <SelectValue placeholder="Select task" />   
+      154 +                  <SelectValue placeholder="Select a task for 
+          +this deliverable" />                                          
+      155                  </SelectTrigger>
+      156                  <SelectContent>
+      184 -                  {tasks.map((t) => (                         
+      185 -                    <SelectItem key={t.id} value={t.id}>      
+      186 -                      {t.title}                               
+      187 -                    </SelectItem>                             
+      188 -                  ))}                                         
+      189 -                </SelectContent>                              
+      190 -              </Select>                                       
+      191 -            </div>                                            
+      192 -                                                              
+      193 -            <div>                                             
+      194 -              <label className="text-sm font-medium">Assign To
+          -</label>                                                      
+      195 -              <Select value={assignedTo} onValueChange={setAss
+          -ignedTo}>                                                     
+      196 -                <SelectTrigger className="mt-1">              
+      197 -                  <SelectValue placeholder="Select team member
+          -" />                                                          
+      198 -                </SelectTrigger>                              
+      199 -                <SelectContent>                               
+      200 -                  {project.teamMemberIds.map((memberId) => {  
+      201 -                    const member = getUserById(memberId);     
+      157 +                  {allTasks.map((t) => {                      
+      158 +                    const milestone = milestones.find((m) => m
+          +.id === t.milestoneId);                                       
+      159                      return (
+      203 -                      <SelectItem key={memberId} value={member
+          -Id}>                                                          
+      204 -                        {member?.name ?? memberId}            
+      160 +                      <SelectItem key={t.id} value={t.id}>    
+      161 +                        {t.title}{milestone ? ` — ${milestone.
+          +title}` : ""}                                                 
+      162                        </SelectItem>
+      163                      );
+      164                    })}
+     ...
+      166                </Select>
+      167              </div>
+      168  
+      169 +            <div>                                             
+      170 +              <label className="text-sm font-medium">Milestone
+          +</label>                                                      
+      171 +              <Input                                          
+      172 +                value={                                       
+      173 +                  milestoneId                                 
+      174 +                    ? (milestones.find((m) => m.id === milesto
+          +neId)?.title ?? "")                                           
+      175 +                    : ""                                      
+      176 +                }                                             
+      177 +                className="mt-1 bg-muted"                     
+      178 +                disabled                                      
+      179 +                placeholder="Auto-populated from task"        
+      180 +              />                                              
+      181 +            </div>                                            
+      182 +                                                              
+      183 +            <div>                                             
+      184 +              <label className="text-sm font-medium">Assigned 
+          +To</label>                                                    
+      185 +              <Input                                          
+      186 +                value={                                       
+      187 +                  assignedTo                                  
+      188 +                    ? (getUserById(assignedTo)?.name ?? assign
+          +edTo)                                                         
+      189 +                    : ""                                      
+      190 +                }                                             
+      191 +                className="mt-1 bg-muted"                     
+      192 +                disabled                                      
+      193 +                placeholder="Auto-populated from task"        
+      194 +              />                                              
+      195 +            </div>                                            
+      196 +                                                              
+      197              <div className="flex gap-2 pt-2">
+      198                <Button type="submit">Create Deliverable</Button
+           >
+      199                <Button
+
+● Now let me also update the deliverable detail page so only the assigned person
+   can upload new versions.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(frontend\components\projects\deliverable-detail-page.tsx)
+  ⎿  Error editing file
+
+● Update(frontend\components\projects\deliverable-detail-page.tsx)
+  ⎿  Added 1 line
+      107    const sortedVersions = [...deliverable.versions].sort(
+      108      (a, b) => parseFloat(b.version) - parseFloat(a.version)
+      109    );
+      110 +  const canUpload = user.id === deliverable.assignedTo;       
+      111  
+      112    const handleUploadVersion = () => {
+      113      if (!uploadNote.trim()) return;
+
+● Update(frontend\components\projects\deliverable-detail-page.tsx)
+  ⎿  Added 6 lines, removed 4 lines
+      243            <h2 className="text-lg font-semibold">
+      244              Version History ({deliverable.versions.length})
+      245            </h2>
+      246 -          <Button size="sm" onClick={() => setShowUploadForm(!
+          -showUploadForm)}>                                             
+      247 -            <Upload className="mr-2 h-4 w-4" />               
+      248 -            Upload New Version                                
+      249 -          </Button>                                           
+      246 +          {canUpload && (                                     
+      247 +            <Button size="sm" onClick={() => setShowUploadForm
+          +(!showUploadForm)}>                                           
+      248 +              <Upload className="mr-2 h-4 w-4" />             
+      249 +              Upload New Version                              
+      250 +            </Button>                                         
+      251 +          )}                                                  
+      252          </div>
+      253  
+      254          {/* Upload form */}
+
+● The upload form is already gated since only canUpload users see the toggle
+  button. Let me verify the final state of both changed files.
+
+  Read 1 file (ctrl+o to expand)
+
+● Everything looks good. Let me do a quick verification of the deliverable list
+  file too.
+
+  Read 1 file (ctrl+o to expand)
+
+● There's an unused Button import. Let me clean that up.
+
+● Update(frontend\components\projects\deliverable-list.tsx)
+  ⎿  Removed 1 line
+      3  import { getUserById } from "@/data/users";
+      4  import type { Deliverable } from "@/data/deliverables";
+      5  import { Badge } from "@/components/ui/badge";
+      6 -import { Button } from "@/components/ui/button";                
+      6  import {
+      7    Download,
+      8    User,
+
+● All changes are complete. Here's a summary of what was implemented:
+
+  Data layer (frontend/data/deliverables.ts):
+  - addDeliverable() — creates a new deliverable linked to a
+  project/milestone/task, with initial version 1.0
+  - addDeliverableVersion() — auto-increments version (1.0 → 2.0 → 3.0) and
+  pushes a new version entry
+
+  New deliverable form (deliverable-new-form.tsx + route):
+  - Task-first selection — pick a task, milestone auto-populates from the task
+  - Assignee locked — the task's assignee is automatically set as the
+  deliverable's assignee (shown as read-only)
+  - Task dropdown shows task title — milestone title for context
+
+  Deliverable detail page (deliverable-detail-page.tsx + route):
+  - Shows title, status badge, current version badge
+  - Metadata cards for assignee, milestone, task
+  - Full version history (newest first) with "Current"/"Superseded" badges
+  - "Upload New Version" button — only visible to the assigned person
+  - Approval info if approved
+
+  Project detail page (page.tsx):
+  - Shows all deliverables (not just approved) in the deliverables tab
+  - "New Deliverable" button added to the tab header
+
+  Deliverable list (deliverable-list.tsx):
+  - Each row is now a clickable link to the deliverable detail page
+  - Accepts projectId and action props
+  - Updated empty state message
+
+✻ Worked for 1m 24s
+
+❯ maybe we use the combobox instead of select as searching would be more easy   
+and then select instead of searching from select and also make sure only the    
+taks of that proejct under which we are comes not all and in the versioning ,   
+after upload , will have toe be approved by th eagency first (owner or pm ) and 
+ then the client for it to be current and approved form both end till then it   
+will show up as drafted and the current would be sstill the last approved from  
+both ends basically                                                             
+
+● This is a bigger change. Let me break it down:
+
+  1. Combobox for task search instead of Select
+  2. Approval workflow for versions — draft → agency approve → client approve →
+  becomes current
+
+  Let me first check the shadcn combobox availability and the current data
+  files.
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me check user roles and auth to understand the approval permissions.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● There's already a combobox. Let me check it.
+
+  Read 1 file (ctrl+o to expand)
+
+● Good, there's a base-ui combobox already. Let me implement all the changes
+  now. I'll work through them systematically.
+
+  Step 1: Update the data model and functions
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 8 lines
+       4    | "approved"
+       5    | "revision_requested";
+       6  
+       7 +export type VersionApprovalStatus = "pending" | "approved";    
+       8 +                                                               
+       9  export interface DeliverableVersion {
+      10    version: string;
+      11    uploadedBy: string; // references users.id
+      12    uploadedAt: string; // ISO datetime
+      13    note: string;
+      14    fileUrl: string; // mock URL
+      15 +  agencyApprovalStatus: VersionApprovalStatus;                 
+      16 +  agencyApprovedBy?: string;                                   
+      17 +  agencyApprovedAt?: string;                                   
+      18 +  clientApprovalStatus: VersionApprovalStatus;                 
+      19 +  clientApprovedBy?: string;                                   
+      20 +  clientApprovedAt?: string;                                   
+      21  }
+      22  
+      23  export interface Deliverable {
+
+● Now update the existing mock data to include approval fields on all versions.
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 54 lines
+      57          uploadedAt: "2026-02-01T16:00:00Z",
+      58          note: "Initial wireframe set — 12 screens",
+      59          fileUrl: "/files/novatech-wireframes-v1.fig",
+      60 +        agencyApprovalStatus: "approved",                      
+      61 +        agencyApprovedBy: "usr_009",                           
+      62 +        agencyApprovedAt: "2026-02-02T10:00:00Z",              
+      63 +        clientApprovalStatus: "approved",                      
+      64 +        clientApprovedBy: "usr_003",                           
+      65 +        clientApprovedAt: "2026-02-03T14:00:00Z",              
+      66        },
+      67        {
+      68          version: "2.0",
+     ...
+      70          uploadedAt: "2026-02-04T14:00:00Z",
+      71          note: "Added filter panel and improved navigation flow 
+          based on feedback",
+      72          fileUrl: "/files/novatech-wireframes-v2.fig",
+      73 +        agencyApprovalStatus: "approved",                      
+      74 +        agencyApprovedBy: "usr_009",                           
+      75 +        agencyApprovedAt: "2026-02-04T14:30:00Z",              
+      76 +        clientApprovalStatus: "approved",                      
+      77 +        clientApprovedBy: "usr_003",                           
+      78 +        clientApprovedAt: "2026-02-04T15:00:00Z",              
+      79        },
+      80      ],
+      81    },
+     ...
+       97          uploadedAt: "2026-02-07T11:00:00Z",
+       98          note: "First pass — dark mode only",
+       99          fileUrl: "/files/novatech-mockups-v1.fig",
+      100 +        agencyApprovalStatus: "approved",                     
+      101 +        agencyApprovedBy: "usr_009",                          
+      102 +        agencyApprovedAt: "2026-02-08T10:00:00Z",             
+      103 +        clientApprovalStatus: "approved",                     
+      104 +        clientApprovedBy: "usr_003",                          
+      105 +        clientApprovedAt: "2026-02-09T14:00:00Z",             
+      106        },
+      107        {
+      108          version: "2.0",
+     ...
+      110          uploadedAt: "2026-02-10T10:00:00Z",
+      111          note: "Added light mode option, updated color palette 
+           per client feedback",
+      112          fileUrl: "/files/novatech-mockups-v2.fig",
+      113 +        agencyApprovalStatus: "approved",                     
+      114 +        agencyApprovedBy: "usr_009",                          
+      115 +        agencyApprovedAt: "2026-02-10T15:00:00Z",             
+      116 +        clientApprovalStatus: "pending",                      
+      117        },
+      118      ],
+      119    },
+     ...
+      135          uploadedAt: "2026-02-12T16:00:00Z",
+      136          note: "Prototype with 4 key flows: dashboard overview,
+            analytics drill-down, report export, and settings",
+      137          fileUrl: "/files/novatech-prototype-v1.fig",
+      138 +        agencyApprovalStatus: "pending",                      
+      139 +        clientApprovalStatus: "pending",                      
+      140        },
+      141      ],
+      142    },
+     ...
+      162          uploadedAt: "2026-02-16T15:00:00Z",
+      163          note: "Initial 3 concepts: Minimalist, Bold & Colorful
+           , Classic Elegance",
+      164          fileUrl: "/files/lumiere-concepts-v1.pdf",
+      165 +        agencyApprovalStatus: "approved",                     
+      166 +        agencyApprovedBy: "usr_010",                          
+      167 +        agencyApprovedAt: "2026-02-17T10:00:00Z",             
+      168 +        clientApprovalStatus: "approved",                     
+      169 +        clientApprovedBy: "usr_008",                          
+      170 +        clientApprovedAt: "2026-02-18T14:00:00Z",             
+      171        },
+      172        {
+      173          version: "2.0",
+     ...
+      175          uploadedAt: "2026-02-18T11:00:00Z",
+      176          note: "Refined Concept B (Minimalist) based on client 
+           feedback — gold & cream palette",
+      177          fileUrl: "/files/lumiere-concepts-v2.pdf",
+      178 +        agencyApprovalStatus: "approved",                     
+      179 +        agencyApprovedBy: "usr_010",                          
+      180 +        agencyApprovedAt: "2026-02-19T10:00:00Z",             
+      181 +        clientApprovalStatus: "approved",                     
+      182 +        clientApprovedBy: "usr_008",                          
+      183 +        clientApprovedAt: "2026-02-20T16:30:00Z",             
+      184        },
+      185      ],
+      186    },
+     ...
+      202          uploadedAt: "2026-03-14T14:00:00Z",
+      203          note: "Initial assets — 1:1 and 16:9 formats",
+      204          fileUrl: "/files/lumiere-social-v1.zip",
+      205 +        agencyApprovalStatus: "approved",                     
+      206 +        agencyApprovedBy: "usr_010",                          
+      207 +        agencyApprovedAt: "2026-03-15T10:00:00Z",             
+      208 +        clientApprovalStatus: "approved",                     
+      209 +        clientApprovedBy: "usr_008",                          
+      210 +        clientApprovedAt: "2026-03-16T14:00:00Z",             
+      211        },
+      212        {
+      213          version: "2.0",
+     ...
+      215          uploadedAt: "2026-03-17T17:00:00Z",
+      216          note: "Added 9:16 vertical formats for Reels and TikTo
+           k per feedback",
+      217          fileUrl: "/files/lumiere-social-v2.zip",
+      218 +        agencyApprovalStatus: "pending",                      
+      219 +        clientApprovalStatus: "pending",                      
+      220        },
+      221      ],
+      222    },
+     ...
+      242          uploadedAt: "2026-02-06T15:00:00Z",
+      243          note: "All 18 screens: onboarding, home, search, resta
+           urant, menu, cart, checkout, orders, profile",
+      244          fileUrl: "/files/foodieapp-wireframes.fig",
+      245 +        agencyApprovalStatus: "approved",                     
+      246 +        agencyApprovedBy: "usr_009",                          
+      247 +        agencyApprovedAt: "2026-02-06T16:00:00Z",             
+      248 +        clientApprovalStatus: "approved",                     
+      249 +        clientApprovedBy: "usr_003",                          
+      250 +        clientApprovedAt: "2026-02-06T17:00:00Z",             
+      251        },
+      252      ],
+      253    },
+     ...
+      269          uploadedAt: "2026-02-18T10:00:00Z",
+      270          note: "First pass — home, search, restaurant detail, a
+           nd checkout screens",
+      271          fileUrl: "/files/foodieapp-ui-v1.fig",
+      272 +        agencyApprovalStatus: "pending",                      
+      273 +        clientApprovalStatus: "pending",                      
+      274        },
+      275      ],
+      276    },
+     ...
+      294          uploadedAt: "2026-03-28T16:00:00Z",
+      295          note: "User flows for onboarding, workout tracking, pr
+           ogress dashboard, and social features",
+      296          fileUrl: "/files/fitpulse-ux-flows-v1.fig",
+      297 +        agencyApprovalStatus: "pending",                      
+      298 +        clientApprovalStatus: "pending",                      
+      299        },
+      300      ],
+      301    },
+
+● Now update the data functions — new versions start as draft, and add approval
+  functions.
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 2 lines, removed 10 lines
+      334      description: data.description,
+      335      assignedTo: data.assignedTo,
+      336      status: "in_progress",
+      337 -    currentVersion: "1.0",                                    
+      338 -    versions: [                                               
+      339 -      {                                                       
+      340 -        version: "1.0",                                       
+      341 -        uploadedBy: data.assignedTo,                          
+      342 -        uploadedAt: new Date().toISOString(),                 
+      343 -        note: "Initial submission",                           
+      344 -        fileUrl: "",                                          
+      345 -      },                                                      
+      346 -    ],                                                        
+      337 +    currentVersion: "0",                                      
+      338 +    versions: [],                                             
+      339    };
+      340    deliverables.push(deliverable);
+      341    return deliverable;
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 11 lines, removed 1 line
+      335      assignedTo: data.assignedTo,
+      336      status: "in_progress",
+      337      currentVersion: "0",
+      338 -    versions: [],                                             
+      338 +    versions: [                                               
+      339 +      {                                                       
+      340 +        version: "1.0",                                       
+      341 +        uploadedBy: data.assignedTo,                          
+      342 +        uploadedAt: new Date().toISOString(),                 
+      343 +        note: "Initial submission",                           
+      344 +        fileUrl: "",                                          
+      345 +        agencyApprovalStatus: "pending",                      
+      346 +        clientApprovalStatus: "pending",                      
+      347 +      },                                                      
+      348 +    ],                                                        
+      349    };
+      350    deliverables.push(deliverable);
+      351    return deliverable;
+
+● Update(frontend\data\deliverables.ts)
+  ⎿  Added 44 lines, removed 2 lines
+      357  ): Deliverable | undefined {
+      358    const deliverable = deliverables.find((d) => d.id === id);
+      359    if (!deliverable) return undefined;
+      360 -  const nextVersion = (Math.floor(parseFloat(deliverable.curre
+          -ntVersion)) + 1).toString() + ".0";                           
+      360 +  const lastVersion = deliverable.versions.length > 0         
+      361 +    ? Math.max(...deliverable.versions.map((v) => parseFloat(v
+          +.version)))                                                   
+      362 +    : 0;                                                      
+      363 +  const nextVersion = (lastVersion + 1).toString() + ".0";    
+      364    deliverable.versions.push({
+      365      version: nextVersion,
+      366      uploadedBy: data.uploadedBy,
+      367      uploadedAt: new Date().toISOString(),
+      368      note: data.note,
+      369      fileUrl: data.fileUrl,
+      370 +    agencyApprovalStatus: "pending",                          
+      371 +    clientApprovalStatus: "pending",                          
+      372    });
+      368 -  deliverable.currentVersion = nextVersion;                   
+      373    return deliverable;
+      374  }
+      375 +                                                              
+      376 +export function approveVersionAgency(                         
+      377 +  deliverableId: string,                                      
+      378 +  version: string,                                            
+      379 +  approverId: string                                          
+      380 +): Deliverable | undefined {                                  
+      381 +  const deliverable = deliverables.find((d) => d.id === delive
+          +rableId);                                                     
+      382 +  if (!deliverable) return undefined;                         
+      383 +  const ver = deliverable.versions.find((v) => v.version === v
+          +ersion);                                                      
+      384 +  if (!ver) return undefined;                                 
+      385 +  ver.agencyApprovalStatus = "approved";                      
+      386 +  ver.agencyApprovedBy = approverId;                          
+      387 +  ver.agencyApprovedAt = new Date().toISOString();            
+      388 +  // If client already approved, this version becomes current 
+      389 +  if (ver.clientApprovalStatus === "approved") {              
+      390 +    deliverable.currentVersion = version;                     
+      391 +  }                                                           
+      392 +  return deliverable;                                         
+      393 +}                                                             
+      394 +                                                              
+      395 +export function approveVersionClient(                         
+      396 +  deliverableId: string,                                      
+      397 +  version: string,                                            
+      398 +  approverId: string                                          
+      399 +): Deliverable | undefined {                                  
+      400 +  const deliverable = deliverables.find((d) => d.id === delive
+          +rableId);                                                     
+      401 +  if (!deliverable) return undefined;                         
+      402 +  const ver = deliverable.versions.find((v) => v.version === v
+          +ersion);                                                      
+      403 +  if (!ver) return undefined;                                 
+      404 +  ver.clientApprovalStatus = "approved";                      
+      405 +  ver.clientApprovedBy = approverId;                          
+      406 +  ver.clientApprovedAt = new Date().toISOString();            
+      407 +  // If agency already approved, this version becomes current 
+      408 +  if (ver.agencyApprovalStatus === "approved") {              
+      409 +    deliverable.currentVersion = version;                     
+      410 +  }                                                           
+      411 +  return deliverable;                                         
+      412 +}                                                             
+
+● Step 2: Update the detail page with approval workflow
+
+  Read 1 file (ctrl+o to expand)
+
+● Now I'll rewrite the detail page with the full approval workflow.
+
+● Write(frontend\components\projects\deliverable-detail-page.tsx)
+  ⎿  Added 109 lines, removed 5 lines
+       6  import { useAuth } from "@/lib/auth";
+       7  import { formatLabel, deliverableStatusColors } from "@/lib/uti
+          ls";
+       8  import { getProjectById } from "@/data/projects";
+       9 -import { getDeliverableById, addDeliverableVersion } from "@/da
+         -ta/deliverables";                                              
+       9 +import {                                                       
+      10 +  getDeliverableById,                                          
+      11 +  addDeliverableVersion,                                       
+      12 +  approveVersionAgency,                                        
+      13 +  approveVersionClient,                                        
+      14 +  type DeliverableVersion,                                     
+      15 +} from "@/data/deliverables";                                  
+      16  import { getMilestoneById } from "@/data/milestones";
+      17  import { getTaskById } from "@/data/tasks";
+      18  import { getUserById } from "@/data/users";
+     ...
+      30    Clock,
+      31    User,
+      32    FileText,
+      33 +  ShieldCheck,                                                 
+      34 +  Handshake,                                                   
+      35 +  AlertCircle,                                                 
+      36  } from "lucide-react";
+      37  
+      38  function formatDateTime(dateStr: string) {
+     ...
+      45    });
+      46  }
+      47  
+      48 +function getVersionStatusLabel(ver: DeliverableVersion): string
+         + {                                                             
+      49 +  if (ver.agencyApprovalStatus === "approved" && ver.clientAppr
+         +ovalStatus === "approved")                                     
+      50 +    return "approved";                                         
+      51 +  if (ver.agencyApprovalStatus === "approved") return "pending_
+         +client";                                                       
+      52 +  return "pending_agency";                                     
+      53 +}                                                              
+      54 +                                                               
+      55 +function getVersionStatusLabelDisplay(ver: DeliverableVersion):
+         + string {                                                      
+      56 +  const status = getVersionStatusLabel(ver);                   
+      57 +  if (status === "approved") return "Approved";                
+      58 +  if (status === "pending_client") return "Pending Client Appro
+         +val";                                                          
+      59 +  return "Pending Agency Approval";                            
+      60 +}                                                              
+      61 +                                                               
+      62 +function getVersionStatusColor(ver: DeliverableVersion): string
+         + {                                                             
+      63 +  const status = getVersionStatusLabel(ver);                   
+      64 +  if (status === "approved") return "bg-status-completed text-s
+         +tatus-completed-foreground";                                   
+      65 +  if (status === "pending_client") return "bg-status-pending te
+         +xt-status-pending-foreground";                                 
+      66 +  return "bg-status-draft text-status-draft-foreground";       
+      67 +}                                                              
+      68 +                                                               
+      69  export function DeliverableDetailPage() {
+      70    const params = useParams();
+      71    const router = useRouter();
+     ...
+      138      (a, b) => parseFloat(b.version) - parseFloat(a.version)
+      139    );
+      140    const canUpload = user.id === deliverable.assignedTo;
+      141 +  const isAgencyApprover = user.role === "agency_owner" || use
+          +r.role === "project_manager";                                 
+      142 +  const isClientApprover = user.role === "client";            
+      143  
+      144    const handleUploadVersion = () => {
+      145      if (!uploadNote.trim()) return;
+     ...
+      153      setShowUploadForm(false);
+      154    };
+      155  
+      156 +  const handleApproveAgency = (version: string) => {          
+      157 +    approveVersionAgency(deliverableId, version, user.id);    
+      158 +  };                                                          
+      159 +                                                              
+      160 +  const handleApproveClient = (version: string) => {          
+      161 +    approveVersionClient(deliverableId, version, user.id);    
+      162 +  };                                                          
+      163 +                                                              
+      164    return (
+      165      <div className="flex flex-col gap-6 p-6">
+      166        {/* Top nav */}
+     ...
+      183                >
+      184                  {formatLabel(deliverable.status)}
+      185                </Badge>
+      146 -              <Badge variant="outline" className="text-[10px] 
+          -font-mono">                                                   
+      147 -                v{deliverable.currentVersion}                 
+      148 -              </Badge>                                        
+      186 +              {deliverable.currentVersion !== "0" && (        
+      187 +                <Badge variant="outline" className="text-[10px
+          +] font-mono">                                                 
+      188 +                  v{deliverable.currentVersion} (current)     
+      189 +                </Badge>                                      
+      190 +              )}                                              
+      191              </div>
+      192              <p className="text-sm text-muted-foreground max-w-
+           2xl">
+      193                {deliverable.description}
+     ...
+      348            {sortedVersions.map((ver) => {
+      349              const uploader = getUserById(ver.uploadedBy);
+      350              const isCurrent = ver.version === deliverable.curr
+           entVersion;
+      351 +            const versionStatus = getVersionStatusLabel(ver); 
+      352  
+      353              return (
+      354                <div
+     ...
+      374                          Current
+      375                        </Badge>
+      376                      )}
+      334 -                    {!isCurrent && sortedVersions.length > 1 &
+          -& (                                                           
+      377 +                    {!isCurrent && versionStatus === "approved
+          +" && (                                                        
+      378                        <Badge
+      379                          variant="outline"
+      380                          className="shrink-0 text-[10px] text-m
+           uted-foreground"
+     ...
+      382                          Superseded
+      383                        </Badge>
+      384                      )}
+      385 +                    <Badge                                    
+      386 +                      variant="secondary"                     
+      387 +                      className={`shrink-0 text-[10px] ${getVe
+          +rsionStatusColor(ver)}`}                                      
+      388 +                    >                                         
+      389 +                      {getVersionStatusLabelDisplay(ver)}     
+      390 +                    </Badge>                                  
+      391                    </div>
+      392 +                                                              
+      393 +                  {/* Approval details row */}                
+      394 +                  <div className="mt-2 flex flex-wrap items-ce
+          +nter gap-3 text-xs">                                          
+      395 +                    <span className="flex items-center gap-1 t
+          +ext-muted-foreground">                                        
+      396 +                      <ShieldCheck className="size-3" />      
+      397 +                      Agency:                                 
+      398 +                      {ver.agencyApprovalStatus === "approved"
+          + ? (                                                          
+      399 +                        <span className="flex items-center gap
+          +-1 text-status-completed-foreground font-medium">             
+      400 +                          <CheckCircle2 className="size-3" /> 
+      401 +                          {getUserById(ver.agencyApprovedBy)?.
+          +name ?? "Approved"}                                           
+      402 +                        </span>                               
+      403 +                      ) : (                                   
+      404 +                        <span className="text-status-draft-for
+          +eground font-medium">Pending</span>                           
+      405 +                      )}                                      
+      406 +                    </span>                                   
+      407 +                    <span className="flex items-center gap-1 t
+          +ext-muted-foreground">                                        
+      408 +                      <Handshake className="size-3" />        
+      409 +                      Client:                                 
+      410 +                      {ver.clientApprovalStatus === "approved"
+          + ? (                                                          
+      411 +                        <span className="flex items-center gap
+          +-1 text-status-completed-foreground font-medium">             
+      412 +                          <CheckCircle2 className="size-3" /> 
+      413 +                          {getUserById(ver.clientApprovedBy)?.
+          +name ?? "Approved"}                                           
+      414 +                        </span>                               
+      415 +                      ) : (                                   
+      416 +                        <span className="text-status-draft-for
+          +eground font-medium">Pending</span>                           
+      417 +                      )}                                      
+      418 +                    </span>                                   
+      419 +                  </div>                                      
+      420 +                                                              
+      421                    <p className="mt-1 text-xs text-muted-foregr
+           ound">
+      422                      {uploader?.name ?? "Unknown"} &middot;{" "
+           }
+      423                      {formatDateTime(ver.uploadedAt)}
+      424                    </p>
+      425 +                                                              
+      426 +                  {/* Approval actions */}                    
+      427 +                  <div className="mt-2 flex flex-wrap gap-2"> 
+      428 +                    {isAgencyApprover && ver.agencyApprovalSta
+          +tus === "pending" && (                                        
+      429 +                      <Button                                 
+      430 +                        size="sm"                             
+      431 +                        variant="outline"                     
+      432 +                        className="h-7 text-xs"               
+      433 +                        onClick={() => handleApproveAgency(ver
+          +.version)}                                                    
+      434 +                      >                                       
+      435 +                        <ShieldCheck className="mr-1.5 h-3 w-3
+          +" />                                                          
+      436 +                        Approve (Agency)                      
+      437 +                      </Button>                               
+      438 +                    )}                                        
+      439 +                    {isClientApprover && ver.clientApprovalSta
+          +tus === "pending" && (                                        
+      440 +                      <Button                                 
+      441 +                        size="sm"                             
+      442 +                        variant="outline"                     
+      443 +                        className="h-7 text-xs"               
+      444 +                        onClick={() => handleApproveClient(ver
+          +.version)}                                                    
+      445 +                      >                                       
+      446 +                        <Handshake className="mr-1.5 h-3 w-3" 
+          +/>                                                            
+      447 +                        Approve (Client)                      
+      448 +                      </Button>                               
+      449 +                    )}                                        
+      450 +                  </div>                                      
+      451                  </div>
+      452                  {ver.fileUrl && (
+      453                    <a
+
+● Step 3: Update the form with Combobox for task selection
+
+● Write(frontend\components\projects\deliverable-new-form.tsx)
+  ⎿  Added 55 lines, removed 25 lines
+      19    CardTitle,
+      20  } from "@/components/ui/card";
+      21  import {
+      22 -  Select,                                                      
+      23 -  SelectContent,                                               
+      24 -  SelectItem,                                                  
+      25 -  SelectTrigger,                                               
+      26 -  SelectValue,                                                 
+      27 -} from "@/components/ui/select";                               
+      28 -import { ArrowLeft } from "lucide-react";                      
+      22 +  Combobox,                                                    
+      23 +  ComboboxInput,                                               
+      24 +  ComboboxContent,                                             
+      25 +  ComboboxList,                                                
+      26 +  ComboboxItem,                                                
+      27 +  ComboboxEmpty,                                               
+      28 +} from "@/components/ui/combobox";                             
+      29 +import { ArrowLeft, Search } from "lucide-react";              
+      30  
+      31  export function DeliverableNewForm() {
+      32    const params = useParams();
+     ...
+      37    const [description, setDescription] = useState("");
+      38    const [milestoneId, setMilestoneId] = useState("");
+      39    const [taskId, setTaskId] = useState("");
+      40 +  const [taskSearch, setTaskSearch] = useState("");            
+      41  
+      42    useEffect(() => {
+      43      if (!isLoading && !user) {
+     ...
+       96      router.push(`/projects/${projectId}#deliverables`);
+       97    };
+       98  
+       99 +  const filteredTasks = taskSearch                            
+      100 +    ? allTasks.filter((t) =>                                  
+      101 +        t.title.toLowerCase().includes(taskSearch.toLowerCase(
+          +))                                                            
+      102 +      )                                                       
+      103 +    : allTasks;                                               
+      104 +                                                              
+      105    return (
+      106      <div className="flex flex-col gap-6 p-6 max-w-2xl">
+      107        <Button asChild variant="ghost" size="sm" className="w-f
+           it -ml-2">
+     ...
+      146                />
+      147              </div>
+      148  
+      149 +            {/* Task combobox — search and select from project
+          + tasks */}                                                    
+      150              <div>
+      151                <label className="text-sm font-medium">Task</lab
+           el>
+      143 -              <Select                                         
+      152 +              <Combobox                                       
+      153                  value={taskId}
+      154                  onValueChange={(val) => {
+      155                    setTaskId(val);
+      156                    const task = getTaskById(val);
+      157                    if (task) {
+      158                      setMilestoneId(task.milestoneId);
+      159 +                    setTaskSearch("");                        
+      160                    }
+      161                  }}
+      162                >
+      153 -                <SelectTrigger className="mt-1">              
+      154 -                  <SelectValue placeholder="Select a task for 
+          -this deliverable" />                                          
+      155 -                </SelectTrigger>                              
+      156 -                <SelectContent>                               
+      157 -                  {allTasks.map((t) => {                      
+      158 -                    const milestone = milestones.find((m) => m
+          -.id === t.milestoneId);                                       
+      159 -                    return (                                  
+      160 -                      <SelectItem key={t.id} value={t.id}>    
+      161 -                        {t.title}{milestone ? ` — ${milestone.
+          -title}` : ""}                                                 
+      162 -                      </SelectItem>                           
+      163 -                    );                                        
+      164 -                  })}                                         
+      165 -                </SelectContent>                              
+      166 -              </Select>                                       
+      163 +                <div className="relative mt-1">               
+      164 +                  <Search className="absolute left-2.5 top-1/2
+          + -translate-y-1/2 size-4 text-muted-foreground pointer-events-
+          +none" />                                                      
+      165 +                  <ComboboxInput                              
+      166 +                    placeholder="Search and select a task..." 
+      167 +                    className="pl-9"                          
+      168 +                    value={taskSearch}                        
+      169 +                    onValueChange={setTaskSearch}             
+      170 +                  />                                          
+      171 +                </div>                                        
+      172 +                <ComboboxContent align="start">               
+      173 +                  <ComboboxList>                              
+      174 +                    <ComboboxEmpty>No tasks found.</ComboboxEm
+          +pty>                                                          
+      175 +                    {filteredTasks.map((t) => {               
+      176 +                      const milestone = milestones.find(      
+      177 +                        (m) => m.id === t.milestoneId         
+      178 +                      );                                      
+      179 +                      const assignee = getUserById(t.assignedT
+          +o);                                                           
+      180 +                      return (                                
+      181 +                        <ComboboxItem key={t.id} value={t.id}>
+      182 +                          <div className="flex flex-col min-w-
+          +0">                                                           
+      183 +                            <span className="text-sm truncate"
+          +>{t.title}</span>                                             
+      184 +                            <span className="text-[11px] text-
+          +muted-foreground truncate">                                   
+      185 +                              {milestone?.title}              
+      186 +                              {assignee ? ` · ${assignee.name}
+          +` : ""}                                                       
+      187 +                            </span>                           
+      188 +                          </div>                              
+      189 +                        </ComboboxItem>                       
+      190 +                      );                                      
+      191 +                    })}                                       
+      192 +                  </ComboboxList>                             
+      193 +                </ComboboxContent>                            
+      194 +              </Combobox>                                     
+      195              </div>
+      196  
+      197              <div>
+     ...
+      199                <Input
+      200                  value={
+      201                    milestoneId
+      174 -                    ? (milestones.find((m) => m.id === milesto
+          -neId)?.title ?? "")                                           
+      202 +                    ? milestones.find((m) => m.id === mileston
+          +eId)?.title ?? ""                                             
+      203                      : ""
+      204                  }
+      205                  className="mt-1 bg-muted"
+     ...
+      213                <Input
+      214                  value={
+      215                    assignedTo
+      188 -                    ? (getUserById(assignedTo)?.name ?? assign
+          -edTo)                                                         
+      216 +                    ? getUserById(assignedTo)?.name ?? assigne
+          +dTo                                                           
+      217                      : ""
+      218                  }
+      219                  className="mt-1 bg-muted"
+     ...
+      223              </div>
+      224  
+      225              <div className="flex gap-2 pt-2">
+      198 -              <Button type="submit">Create Deliverable</Button
+          ->                                                             
+      226 +              <Button type="submit" disabled={!taskId || !titl
+          +e.trim()}>                                                    
+      227 +                Create Deliverable                            
+      228 +              </Button>                                       
+      229                <Button
+      230                  type="button"
+      231                  variant="outline"
+
+● Let me verify the build compiles.
+
+● Bash(npx next build 2>&1 | tail -60)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ Can we create a proper flow for the whole deliverables , approval , and       
+adding new version etc , i dont think new version is possible to add in the     
+current check that once and oversll the delievrables just seem complex and not  
+easy to understand                                                              
+
+● Let me step back and plan the whole deliverable flow properly.
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Let me re-read the current state of all the files I've modified to understand
+  what's there now.
+
+  Read 1 file (ctrl+o to expand)
+
+● Now I have a clear picture of the current state. The detail page is overloaded
+   — every version card shows 8+ pieces of info with inline approval buttons.
+  Let me write a cleaner plan.
+
+● Updated plan
+  ⎿  Error writing file
+
+  Read 1 file (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
